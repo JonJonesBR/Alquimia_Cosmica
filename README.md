@@ -1,6 +1,6 @@
 # 🌌 Alquimia Cósmica
 
-# [Jogue Agora!](https://jonjonesbr.github.io/Alquimia_Cosmica/)**
+# [Jogue Agora!](https://jonjonesbr.github.io/Alquimia_Cosmica/)
 
 ![Captura de Tela do Jogo](https://raw.githubusercontent.com/JonJonesBR/Alquimia_Cosmica/refs/heads/main/IMG_2398.jpeg)
 
