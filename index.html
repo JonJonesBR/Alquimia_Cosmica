@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Alquimia Cósmica v2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --glow-color: #00aaff;
+            --select-color: #ffee58;
+            --fail-color: #ff4444;
+            --hint-color: #ff9900;
+            --bg-color: #020010;
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(ellipse at top, #080c2f, transparent),
+                radial-gradient(ellipse at bottom, #1a0a3f, transparent);
+            color: #e0e0e0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        #particles-js { position: absolute; width: 100%; height: 100%; top: 0; left: 0; z-index: 0; }
+        .game-container { position: relative; z-index: 1; }
+        .crucible {
+            border-radius: 50%;
+            border: 2px solid var(--glow-color);
+            box-shadow: 0 0 15px var(--glow-color), 0 0 30px var(--glow-color) inset;
+            background: radial-gradient(circle, rgba(2,0,16,0.8) 0%, rgba(0,170,255,0.2) 100%);
+            transition: all 0.4s ease;
+            animation: pulse 4s infinite ease-in-out;
+        }
+        .crucible.drag-over { transform: scale(1.1); box-shadow: 0 0 25px var(--glow-color), 0 0 50px var(--glow-color) inset; }
+        .crucible.success { animation: success-flash 0.6s ease-out; }
+        .crucible.fail {
+            animation: fail-shake 0.5s ease-in-out;
+            border-color: var(--fail-color);
+            box-shadow: 0 0 15px var(--fail-color), 0 0 30px var(--fail-color) inset;
+        }
+        @keyframes pulse { 0% { transform: scale(0.95); } 50% { transform: scale(1); } 100% { transform: scale(0.95); } }
+        @keyframes success-flash { 0% { transform: scale(1); } 50% { transform: scale(1.2); background-color: #fff; box-shadow: 0 0 50px #fff; } 100% { transform: scale(1); } }
+        @keyframes fail-shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+        
+        .element-rune {
+            position: absolute;
+            background-color: rgba(10, 23, 61, 0.5);
+            border: 1px solid rgba(0, 170, 255, 0.5);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+        .element-rune:hover { transform: scale(1.1); box-shadow: 0 0 10px var(--glow-color); z-index: 11; }
+        .element-rune.selected { border-color: var(--select-color); box-shadow: 0 0 15px var(--select-color); }
+        .element-rune.selected svg { stroke: var(--select-color); filter: drop-shadow(0 0 5px var(--select-color)); }
+        .element-rune.hint {
+            animation: hint-glow 2s infinite;
+        }
+        @keyframes hint-glow {
+            0%, 100% { border-color: var(--hint-color); box-shadow: 0 0 15px var(--hint-color); }
+            50% { border-color: rgba(0, 170, 255, 0.5); box-shadow: none; }
+        }
+        .element-rune svg { width: 50%; height: 50%; stroke: var(--glow-color); stroke-width: 2; fill: none; filter: drop-shadow(0 0 3px var(--glow-color)); transition: all 0.3s ease; }
+        .element-rune .element-name {
+            font-size: 10px; /* Alterado para um valor fixo para melhor legibilidade */
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            pointer-events: none;
+        }
+        
+        .codex-modal { background-color: rgba(2, 0, 16, 0.95); border: 1px solid var(--glow-color); box-shadow: 0 0 20px var(--glow-color); }
+        .powerup-button:disabled { cursor: not-allowed; filter: grayscale(80%); opacity: 0.5; }
+    </style>
+</head>
+<body>
+    <div id="particles-js"></div>
+    <div class="game-container w-screen h-screen flex flex-col items-center justify-center p-4">
+
+        <header class="absolute top-0 text-center p-4 w-full z-10">
+            <h1 class="font-orbitron text-3xl md:text-4xl text-white tracking-widest">Alquimia Cósmica</h1>
+            <div id="level-display" class="mt-2 text-lg"></div>
+            <p id="feedback" class="text-blue-300 h-6 mt-1 text-lg font-semibold"></p>
+        </header>
+
+        <main class="relative w-full h-full flex items-center justify-center">
+            <div id="elements-orbit" class="absolute w-full h-full"></div>
+            <div id="crucible" class="crucible flex items-center justify-center">
+                <div id="crucible-content" class="flex gap-4"></div>
+            </div>
+        </main>
+        
+        <div class="absolute top-4 right-4 z-50 flex flex-col gap-2">
+            <button id="codex-button" class="bg-blue-500/30 border border-blue-400 text-white font-orbitron py-2 px-4 rounded-lg hover:bg-blue-500/50 transition-all">CÓDICE</button>
+            <button id="powerup-hint" class="powerup-button bg-orange-500/30 border border-orange-400 text-white font-orbitron py-2 px-4 rounded-lg hover:bg-orange-500/50 transition-all flex items-center justify-center gap-2">
+                💡<span id="hint-count">0</span>
+            </button>
+        </div>
+        <button id="reset-button" class="absolute bottom-4 left-4 z-50 bg-red-500/30 border border-red-400 text-white font-orbitron py-2 px-4 rounded-lg hover:bg-red-500/50 transition-all">RESET</button>
+    </div>
+
+    <!-- Modal do Códice Estelar -->
+    <div id="codex-modal" class="codex-modal fixed inset-0 z-50 hidden items-center justify-center">
+        <div class="w-11/12 max-w-4xl h-5/6 bg-bg-color/80 rounded-lg p-4 sm:p-6 flex flex-col">
+            <div class="flex justify-between items-center">
+                <h2 class="font-orbitron text-3xl text-blue-300">Códice Estelar</h2>
+                <button id="close-codex" class="text-4xl text-blue-300">&times;</button>
+            </div>
+            <div id="codex-grid" class="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto flex-grow pr-2"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            particlesJS('particles-js', { particles: { number: { value: 80 }, color: { value: "#ffffff" }, shape: { type: "circle" }, opacity: { value: 0.5, random: true }, size: { value: 2, random: true }, move: { enable: true, speed: 0.5, direction: "none", random: true, out_mode: "out" } } });
+
+            // --- DEFINIÇÕES DO JOGO ---
+            const initialElements = { 'hidrogênio': { emoji: 'H', description: 'O início de tudo.' }, 'poeira cósmica': { emoji: '✨', description: 'Sementes de novos mundos.' }, 'gravidade': { emoji: 'G', description: 'A força que une o universo.' }, 'luz': { emoji: 'L', description: 'A primeira emanação do vácuo.' } };
+            const recipes = {
+                'hidrogênio+gravidade': { name: 'estrela', emoji: '★', description: 'Um forno nuclear forjado pela gravidade.' },
+                'estrela+gravidade': { name: 'supernova', emoji: '💥', description: 'A morte explosiva de uma estrela.' },
+                'supernova+poeira cósmica': { name: 'nebulosa', emoji: 'N', description: 'Um berçário de estrelas.' },
+                'nebulosa+gravidade': { name: 'planeta rochoso', emoji: 'P', description: 'Um mundo sólido forjado no tempo.' },
+                'planeta rochoso+luz': { name: 'dia e noite', emoji: '🌗', description: 'O ciclo eterno de luz e sombra.' },
+                'hidrogênio+luz': { name: 'plasma', emoji: '⚡', description: 'O quarto estado da matéria.' },
+                'planeta rochoso+estrela': { name: 'vida primordial', emoji: 'V', description: 'A faísca inicial da existência.' },
+                'vida primordial+planeta rochoso': { name: 'biosfera', emoji: 'B', description: 'A fina camada de vida.' },
+                'vida primordial+gravidade': { name: 'evolução', emoji: 'E', description: 'A força motriz da complexidade.'},
+                'evolução+biosfera': { name: 'consciência', emoji: 'C', description: 'O universo ciente de si mesmo.'},
+                'consciência+estrela': { name: 'astronomia', emoji: 'A', description: 'A busca pelo conhecimento nas estrelas.'},
+                'planeta rochoso+poeira cósmica': { name: 'lua', emoji: 'M', description: 'Um satélite natural, guardião da noite.'},
+                'consciência+astronomia': {name: 'tecnologia', emoji: 'T', description: 'A aplicação do conhecimento.'},
+                'tecnologia+estrela': {name: 'viagem espacial', emoji: 'S', description: 'Cruzando o vazio entre os mundos.'},
+                'supernova+gravidade': {name: 'buraco negro', emoji: 'X', description: 'Uma singularidade onde o espaço-tempo se curva.'},
+            };
+            const icons = { 'H': `<path d="M4 4 L4 28 M28 4 L28 28 M4 16 L28 16"/>`, '✨': `<path d="M16 2 L18 10 L26 12 L18 14 L16 22 L14 14 L6 12 L14 10 Z"/>`, 'G': `<path d="M28 16 A 12 12 0 1 1 16 4 L16 16 L28 16"/>`, 'L': `<path d="M16 2 L16 10 M16 22 L16 30 M2 16 L10 16 M22 16 L30 16 M6 6 L12 12 M20 20 L26 26 M6 26 L12 20 M20 12 L26 6"/>`, '★': `<polygon points="16,2 20,12 30,12 22,18 25,28 16,22 7,28 10,18 2,12 12,12"/>`, '💥': `<path d="M16 16 L28 4 M16 16 L30 16 M16 16 L28 28 M16 16 L16 30 M16 16 L4 28 M16 16 L2 16 M16 16 L4 4 M16 16 L16 2"/>`, 'N': `<path d="M4 4 Q 16 12 4 20 Q 16 28 4 36 M28 4 Q 16 12 28 20 Q 16 28 28 36" stroke-linecap="round"/>`, 'P': `<circle cx="16" cy="16" r="12"/><path d="M4 16 Q 16 20 28 16"/>`, '🌗': `<path d="M16 4 A 12 12 0 1 1 16 28 Z M16 4 A 12 12 0 1 0 16 28"/>`, '⚡': `<polygon points="12,2 20,2 16,12 24,12 8,30 12,18 4,18"/>`, 'V': `<path d="M8 28 C 16 16, 16 16, 24 4"/>`, 'B': `<circle cx="16" cy="16" r="12"/><path d="M16 4 A 12 12 0 0 1 16 28 A 6 6 0 0 0 16 4"/>`, 'E': `<path d="M4 16 C 4 8, 12 4, 16 4 S 28 8, 28 16 S 20 28, 16 28 S 4 24, 4 16"/>`, 'C': `<circle cx="16" cy="16" r="10"/><circle cx="16" cy="16" r="3"/>`, 'A': `<circle cx="16" cy="16" r="12"/><path d="M16 4 L16 28 M4 16 L28 16"/>`, 'M': `<circle cx="16" cy="16" r="10"/><circle cx="20" cy="12" r="3"/>`, 'T': `<path d="M2 10 L30 10 M16 2 L16 30"/>`, 'S': `<path d="M30 2 L12 16 L30 30 M2 16 L20 16"/>`, 'X': `<circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="8"/><path d="M4 4 L28 28 M28 4 L4 28"/>` };
+            const levels = [ { name: "Neófito Cósmico", required: 4, reward: { hints: 1 } }, { name: "Aprendiz Estelar", required: 7, reward: { hints: 1 } }, { name: "Criador de Mundos", required: 10, reward: { hints: 2, wormhole: 1 } }, { name: "Arquiteto Universal", required: 15, reward: { hints: 3 } } ];
+            
+            // --- ELEMENTOS DO DOM ---
+            const dom = { crucible: document.getElementById('crucible'), crucibleContent: document.getElementById('crucible-content'), orbitContainer: document.getElementById('elements-orbit'), feedback: document.getElementById('feedback'), resetButton: document.getElementById('reset-button'), codexButton: document.getElementById('codex-button'), codexModal: document.getElementById('codex-modal'), closeCodexButton: document.getElementById('close-codex'), codexGrid: document.getElementById('codex-grid'), levelDisplay: document.getElementById('level-display'), powerupHint: document.getElementById('powerup-hint'), hintCount: document.getElementById('hint-count') };
+
+            // --- ESTADO DO JOGO ---
+            let state = { discovered: {}, inCrucible: [], hints: 0, currentLevel: 0 };
+            
+            // --- EFEITOS SONOROS ---
+            const sfx = { success: new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sine" } }).toDestination(), fail: new Tone.MonoSynth({ oscillator: { type: "square" }, envelope: { attack: 0.01, release: 0.2 } }).toDestination(), powerup: new Tone.Synth({ oscillator: { type: 'triangle' } }).toDestination() };
+            const playSfx = (sound) => { if (Tone.context.state !== 'running') Tone.context.resume(); sound.triggerAttackRelease(sound === sfx.success ? ["C4", "G4"] : (sound === sfx.fail ? "C3" : "A5"), "8n"); };
+
+            // --- LÓGICA DO JOGO ---
+            const save = () => localStorage.setItem('cosmicAlchemySave_v3', JSON.stringify(state));
+            const load = () => { const saved = localStorage.getItem('cosmicAlchemySave_v3'); state = saved ? JSON.parse(saved) : { discovered: { ...initialElements }, inCrucible: [], hints: 1, currentLevel: 0 }; };
+
+            const createRune = (name, data, isInteractive = true) => {
+                const rune = document.createElement('div');
+                const size = isInteractive ? 80 : 60;
+                rune.className = 'element-rune';
+                rune.dataset.name = name;
+                rune.style.width = `${size}px`;
+                rune.style.height = `${size}px`;
+                rune.innerHTML = `<svg viewBox="0 0 32 32">${icons[data.emoji] || ''}</svg><span class="element-name">${name}</span>`;
+                if(isInteractive) {
+                    rune.draggable = true;
+                    rune.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', name));
+                    rune.addEventListener('click', () => handleElementSelection(name));
+                }
+                return rune;
+            };
+
+            const renderOrbit = () => {
+                dom.orbitContainer.innerHTML = '';
+                const names = Object.keys(state.discovered);
+                const count = names.length;
+                const baseRadius = Math.min(window.innerWidth, window.innerHeight) / 2.2;
+                const shrinkFactor = count * 3;
+                const radius = Math.max(120, baseRadius - shrinkFactor);
+                
+                names.forEach((name, i) => {
+                    const angle = (i / count) * 2 * Math.PI;
+                    const x = Math.cos(angle) * radius + (window.innerWidth / 2) - 40;
+                    const y = Math.sin(angle) * radius + (window.innerHeight / 2) - 40;
+                    const rune = createRune(name, state.discovered[name]);
+                    rune.style.left = `${x}px`;
+                    rune.style.top = `${y}px`;
+                    dom.orbitContainer.appendChild(rune);
+                });
+                
+                const crucibleSize = Math.max(100, 200 - shrinkFactor * 0.5);
+                dom.crucible.style.width = `${crucibleSize}px`;
+                dom.crucible.style.height = `${crucibleSize}px`;
+            };
+
+            const handleElementSelection = (name) => {
+                const runeInOrbit = document.querySelector(`#elements-orbit [data-name="${name}"]`);
+                const index = state.inCrucible.indexOf(name);
+                if (index > -1) {
+                    state.inCrucible.splice(index, 1);
+                    runeInOrbit?.classList.remove('selected');
+                } else if (state.inCrucible.length < 2) {
+                    state.inCrucible.push(name);
+                    runeInOrbit?.classList.add('selected');
+                }
+                updateCrucibleVisuals();
+                if (state.inCrucible.length === 2) setTimeout(combine, 300);
+            };
+            
+            const updateCrucibleVisuals = () => {
+                dom.crucibleContent.innerHTML = '';
+                state.inCrucible.forEach(name => {
+                    const runeIcon = createRune(name, state.discovered[name], false);
+                    runeIcon.style.position = 'relative';
+                    dom.crucibleContent.appendChild(runeIcon);
+                });
+            };
+
+            const combine = () => {
+                document.querySelectorAll('.element-rune.selected').forEach(el => el.classList.remove('selected'));
+                const key1 = `${state.inCrucible[0]}+${state.inCrucible[1]}`;
+                const key2 = `${state.inCrucible[1]}+${state.inCrucible[0]}`;
+                const result = recipes[key1] || recipes[key2];
+
+                if (result) {
+                    const isNew = !state.discovered[result.name];
+                    dom.feedback.textContent = `CRIAÇÃO: ${result.name}!`;
+                    dom.crucible.classList.add('success');
+                    playSfx(sfx.success);
+                    if (isNew) {
+                        state.discovered[result.name] = result;
+                        checkLevelUp();
+                        save();
+                        setTimeout(renderOrbit, 500);
+                        updateCodex();
+                    }
+                } else {
+                    dom.feedback.textContent = "Combinação Instável";
+                    dom.crucible.classList.add('fail');
+                    playSfx(sfx.fail);
+                }
+                setTimeout(() => {
+                    state.inCrucible = [];
+                    updateCrucibleVisuals();
+                    dom.feedback.textContent = '';
+                    dom.crucible.className = 'crucible flex items-center justify-center';
+                }, 1500);
+            };
+            
+            const checkLevelUp = () => {
+                const discoveredCount = Object.keys(state.discovered).length;
+                const nextLevel = levels[state.currentLevel];
+                if (nextLevel && discoveredCount >= nextLevel.required) {
+                    dom.feedback.textContent = `NÍVEL ALCANÇADO: ${nextLevel.name}!`;
+                    if(nextLevel.reward.hints) state.hints += nextLevel.reward.hints;
+                    if(nextLevel.reward.wormhole) grantWormholeDiscovery();
+                    state.currentLevel++;
+                    updateUI();
+                }
+            };
+
+            const grantWormholeDiscovery = () => {
+                const undiscovered = Object.values(recipes).filter(r => !state.discovered[r.name]);
+                if(undiscovered.length > 0) {
+                    const toDiscover = undiscovered[Math.floor(Math.random() * undiscovered.length)];
+                    state.discovered[toDiscover.name] = toDiscover;
+                    setTimeout(() => {
+                        dom.feedback.textContent = `Buraco de Minhoca revelou: ${toDiscover.name}!`;
+                        playSfx(sfx.powerup);
+                        renderOrbit();
+                        updateCodex();
+                    }, 2000);
+                }
+            };
+
+            const useHint = () => {
+                if(state.hints <= 0) return;
+                const possibleCreations = [];
+                for(const key in recipes) {
+                    const [el1, el2] = key.split('+');
+                    if(state.discovered[el1] && state.discovered[el2] && !state.discovered[recipes[key].name]) {
+                        possibleCreations.push([el1, el2]);
+                    }
+                }
+                if(possibleCreations.length > 0) {
+                    const [hintEl1, hintEl2] = possibleCreations[Math.floor(Math.random() * possibleCreations.length)];
+                    document.querySelector(`[data-name="${hintEl1}"]`)?.classList.add('hint');
+                    document.querySelector(`[data-name="${hintEl2}"]`)?.classList.add('hint');
+                    state.hints--;
+                    playSfx(sfx.powerup);
+                    updateUI();
+                    setTimeout(() => {
+                        document.querySelector(`[data-name="${hintEl1}"]`)?.classList.remove('hint');
+                        document.querySelector(`[data-name="${hintEl2}"]`)?.classList.remove('hint');
+                    }, 2500);
+                } else {
+                    dom.feedback.textContent = "Nenhuma nova combinação possível agora.";
+                }
+            };
+
+            const updateUI = () => {
+                const level = levels[state.currentLevel];
+                const discoveredCount = Object.keys(state.discovered).length;
+                if(level) {
+                    dom.levelDisplay.innerHTML = `<span class="font-orbitron">${level.name}</span> (${discoveredCount}/${level.required})`;
+                } else {
+                    dom.levelDisplay.textContent = "Arquiteto Universal";
+                }
+                dom.hintCount.textContent = state.hints;
+                dom.powerupHint.disabled = state.hints <= 0;
+            };
+            
+            const updateCodex = () => {
+                dom.codexGrid.innerHTML = '';
+                Object.entries(state.discovered).sort((a,b) => a[0].localeCompare(b[0])).forEach(([name, data]) => {
+                    const entry = document.createElement('div');
+                    entry.className = 'flex flex-col sm:flex-row items-center text-center sm:text-left gap-2 sm:gap-4 p-3 bg-blue-900/20 rounded-md';
+                    const rune = createRune(name, data, false);
+                    rune.style.position = 'relative';
+                    const textDiv = document.createElement('div');
+                    textDiv.innerHTML = `<h3 class="font-orbitron text-blue-300">${name}</h3><p class="text-sm text-gray-400 mt-1">${data.description}</p>`;
+                    entry.appendChild(rune);
+                    entry.appendChild(textDiv);
+                    dom.codexGrid.appendChild(entry);
+                });
+            };
+
+            // --- EVENT LISTENERS ---
+            dom.crucible.addEventListener('dragover', (e) => { e.preventDefault(); dom.crucible.classList.add('drag-over'); });
+            dom.crucible.addEventListener('dragleave', () => dom.crucible.classList.remove('drag-over'));
+            dom.crucible.addEventListener('drop', (e) => { e.preventDefault(); dom.crucible.classList.remove('drag-over'); handleElementSelection(e.dataTransfer.getData('text/plain')); });
+            dom.resetButton.addEventListener('click', () => { if(confirm('Tem certeza que deseja resetar o universo?')) { localStorage.removeItem('cosmicAlchemySave_v3'); init(); } });
+            dom.codexButton.addEventListener('click', () => dom.codexModal.classList.remove('hidden'));
+            dom.closeCodexButton.addEventListener('click', () => dom.codexModal.classList.add('hidden'));
+            dom.powerupHint.addEventListener('click', useHint);
+            window.addEventListener('resize', renderOrbit);
+
+            // --- INICIALIZAÇÃO ---
+            const init = () => {
+                load();
+                renderOrbit();
+                updateCodex();
+                updateUI();
+                checkLevelUp();
+            };
+            init();
+        });
+    </script>
+</body>
+</html>
